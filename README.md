@@ -33,15 +33,19 @@ UpGrade/
 │   │   ├── main.py              # lifespan + CORSMiddleware + / + /health
 │   │   ├── core/config.py       # BaseSettings (pydantic-settings)
 │   │   ├── api/routers/health.py
-│   │   ├── db/database.py
+│   │   ├── db/database.py       # Postgres / Neon wiring
+│   │   ├── db/redis.py          # Redis client & health checks (redis.asyncio)
 │   │   ├── models/ schemas/ services/
+│   │   ├── tools/               # LLM tool schemas & execution boundary
+│   │   ├── workers/             # arq background task workers
 │   │   └── api/deps.py
-│   ├── tests/test_health.py
+│   ├── tests/test_health.py, test_redis.py
 │   ├── pyproject.toml   # requires-python >=3.13, ruff, mypy, pytest
 │   ├── uv.lock
 │   ├── .python-version  # 3.13
 │   └── .env.example
 │
+├── .github/workflows/ci.yml     # GitHub Actions CI for backend and mobile
 └── README.md
 ```
 
@@ -106,6 +110,25 @@ The app currently shows `Hello World!` (empty template). Clean-architecture fold
 - Flutter 3.47.1 requires `minSdkVersion 24`, Gradle 8.7, AGP 8.6, Java 17; Impeller now default on desktop; `flutter_localizations` unbundled.
 - FastAPI `app.on_event` is deprecated since 0.93 — this project uses `lifespan` (`asynccontextmanager`). CORS via `CORSMiddleware`; env via `pydantic-settings` `SettingsConfigDict(env_file=".env")`.
 - `uv` is the standard package manager — `pip/poetry` not used. Lockfile `uv.lock` is committed; CI uses `uv sync --frozen`.
+
+---
+
+## Provisioning & Infrastructure
+
+### 1. Neon Postgres
+- **Database URL:** Configured in `backend/.env` via `DATABASE_URL`.
+- **Neon Console:** Create project / branch on [neon.tech](https://neon.tech), grab connection string (`postgresql://neondb_owner:...@ep-...aws.neon.tech/neondb?sslmode=require`).
+- **Connection Wiring:** Managed in `app/db/database.py` and `app/core/config.py`.
+
+### 2. Redis
+- **Redis URL:** Configured in `backend/.env` via `REDIS_URL` (default: `redis://localhost:6379/0` for local, or Upstash / Managed Redis URL for cloud).
+- **Used for:** arq background task queue (JIT feed generation), JWT refresh token revocation store, and Open Chat rate limiting (50 msg/hr).
+- **Async Client:** Managed via `app/db/redis.py` (`redis.asyncio` with connection pooling, health checks, and lifespan teardown).
+
+### 3. Continuous Integration (CI)
+- `.github/workflows/ci.yml` runs on push and PR to `main`.
+- **Backend:** `uv sync --frozen`, `ruff check .`, `ruff format --check .`, `mypy app`, `pytest -v`.
+- **Mobile:** `flutter analyze`.
 
 ---
 

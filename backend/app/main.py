@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routers.health import router as health_router
 from app.core.config import settings
+from app.db.redis import close_redis
 
 
 @asynccontextmanager
@@ -18,6 +19,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     yield
     # Shutdown
     print("Shutting down...")
+    await close_redis()
 
 
 app = FastAPI(

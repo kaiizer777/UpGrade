@@ -6,5 +6,15 @@ dist/
 wheels/
 *.egg-info
 
-# Virtual environments
+# Virtual environments & env files
 .venv
+.env
+.env.*
+!.env.example
+
+# Cache & tests
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+*.sqlite
+*.db

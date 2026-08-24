@@ -10,6 +10,7 @@ dependencies = [
     "pydantic>=2.13.4",
     "pydantic-settings>=2.6.0",
     "python-multipart>=0.0.32",
+    "redis[hiredis]>=8.1.0",
     "uvicorn[standard]>=0.34",
 ]
 
