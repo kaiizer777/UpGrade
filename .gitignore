@@ -1,4 +1,6 @@
-# Root
+# Root — ignore all .md in root except README.md
+/*.md
+!/README.md
 .DS_Store
 Thumbs.db
 *.log
