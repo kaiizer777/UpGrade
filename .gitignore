@@ -1,0 +1,50 @@
+# Root
+.DS_Store
+Thumbs.db
+*.log
+
+# Flutter / Dart — mobile/
+mobile/.dart_tool/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/.packages
+mobile/build/
+mobile/ios/Flutter/.last_build_id
+mobile/.pub-cache/
+mobile/pubspec.lock
+# keep pubspec.lock for apps? uncomment to ignore: # mobile/pubspec.lock
+mobile/.idea/
+mobile/*.iml
+mobile/*.jks
+mobile/*.keystore
+mobile/android/app/debug
+mobile/android/app/profile
+mobile/android/app/release
+mobile/android/key.properties
+mobile/macos/Flutter/GeneratedPluginRegistrant.swift
+
+# Python / FastAPI — backend/
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/.mypy_cache/
+backend/.ruff_cache/
+backend/.pytest_cache/
+backend/*.egg-info/
+backend/dist/
+backend/.env
+backend/*.db
+backend/*.sqlite
+backend/alembic/__pycache__/
+
+# General
+.env
+.venv
+venv/
+*.pyc
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
