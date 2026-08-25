@@ -1,8 +1,89 @@
-"""LLM tool definitions and execution layer.
+"""LLM tool definitions, schemas, execution handlers, and dispatcher."""
 
-Validated Pydantic schemas and handler functions for AI DB access
-(e.g., ask_question, finalize_profile, create_roadmap,
-generate_feed_batch, mark_topic_complete).
-"""
+from app.tools.dispatcher import (
+    TOOL_REGISTRY,
+    ToolDefinition,
+    ToolRetryTracker,
+    execute_tool,
+    get_tool_definitions,
+)
+from app.tools.exceptions import (
+    MaxQuestionsExceededError,
+    ToolError,
+    ToolExecutionError,
+    ToolNotFoundError,
+    ToolValidationError,
+)
+from app.tools.handlers import (
+    MAX_ONBOARDING_QUESTIONS,
+    execute_ask_question,
+    execute_create_roadmap,
+    execute_finalize_profile,
+    execute_generate_feed_batch,
+    execute_log_chat_message,
+    execute_mark_topic_complete,
+    execute_save_answer,
+)
+from app.tools.schemas import (
+    AskQuestionInput,
+    AskQuestionOutput,
+    CreatedFeedPostItem,
+    CreatedTopicItem,
+    CreateRoadmapInput,
+    CreateRoadmapOutput,
+    FeedPostItem,
+    FinalizeProfileInput,
+    FinalizeProfileOutput,
+    GenerateFeedBatchInput,
+    GenerateFeedBatchOutput,
+    LogChatMessageInput,
+    LogChatMessageOutput,
+    MarkTopicCompleteInput,
+    MarkTopicCompleteOutput,
+    RoadmapTopicItem,
+    SaveAnswerInput,
+    SaveAnswerOutput,
+    ToolCallRequest,
+    ToolResult,
+)
 
-# Placeholder - add Pydantic tool schemas and handlers here (Phase 3)
+__all__ = [
+    "MAX_ONBOARDING_QUESTIONS",
+    "TOOL_REGISTRY",
+    "AskQuestionInput",
+    "AskQuestionOutput",
+    "CreateRoadmapInput",
+    "CreateRoadmapOutput",
+    "CreatedFeedPostItem",
+    "CreatedTopicItem",
+    "FeedPostItem",
+    "FinalizeProfileInput",
+    "FinalizeProfileOutput",
+    "GenerateFeedBatchInput",
+    "GenerateFeedBatchOutput",
+    "LogChatMessageInput",
+    "LogChatMessageOutput",
+    "MarkTopicCompleteInput",
+    "MarkTopicCompleteOutput",
+    "MaxQuestionsExceededError",
+    "RoadmapTopicItem",
+    "SaveAnswerInput",
+    "SaveAnswerOutput",
+    "ToolCallRequest",
+    "ToolDefinition",
+    "ToolError",
+    "ToolExecutionError",
+    "ToolNotFoundError",
+    "ToolResult",
+    "ToolRetryTracker",
+    "ToolValidationError",
+    "execute_ask_question",
+    "execute_create_roadmap",
+    "execute_finalize_profile",
+    "execute_generate_feed_batch",
+    "execute_log_chat_message",
+    "execute_mark_topic_complete",
+    "execute_save_answer",
+    "execute_tool",
+    "get_tool_definitions",
+]

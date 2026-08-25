@@ -14,6 +14,13 @@ class Settings(BaseSettings):
     jwt_secret: str = "change-me-in-production-jwt-secret"
     groq_api_key: str = ""
     opencode_api_key: str = ""
+
+    # AI provider selection ("groq" | "opencode")
+    ai_provider: str = "groq"
+    ai_model_groq: str = "openai/gpt-oss-120b"
+    ai_model_opencode: str = "hy3-free"
+    ai_base_url_groq: str = "https://api.groq.com/openai/v1"
+    ai_base_url_opencode: str = "https://opencode.ai/zen/v1"
     google_client_id: str = ""
     google_client_secret: str = ""
 

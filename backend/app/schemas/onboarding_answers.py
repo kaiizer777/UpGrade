@@ -24,6 +24,4 @@ class OnboardingAnswerRead(OnboardingAnswerBase):
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
-    subject_id: uuid.UUID
     created_at: datetime

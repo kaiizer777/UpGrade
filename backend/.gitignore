@@ -18,3 +18,5 @@ wheels/
 .pytest_cache/
 *.sqlite
 *.db
+check_*.py
+test_*.db

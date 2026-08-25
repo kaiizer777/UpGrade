@@ -4,6 +4,7 @@ import enum
 import uuid
 from typing import TYPE_CHECKING, Optional
 
+import sqlalchemy as sa
 from sqlalchemy import Column, Index
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB
@@ -41,7 +42,7 @@ class Topic(SQLModel, table=True):
     order_index: int = Field(nullable=False)
     prerequisite_ids: list[int] = Field(
         default_factory=list,
-        sa_column=Column(JSONB, nullable=False, default=list),
+        sa_column=Column(JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")),
     )
     status: TopicStatus = Field(
         default=TopicStatus.PENDING,

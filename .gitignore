@@ -37,7 +37,11 @@ backend/dist/
 backend/.env
 backend/*.db
 backend/*.sqlite
+backend/check_*.py
+backend/test_*.db
 backend/alembic/__pycache__/
+*.db
+check_*.py
 
 # General
 .env

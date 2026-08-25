@@ -33,3 +33,15 @@ class SubjectRead(SubjectBase):
 
     id: uuid.UUID
     created_at: datetime
+
+
+class SubjectListItemRead(BaseModel):
+    """Schema for listing subjects with their onboarding status."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    title: str
+    description: str | None = None
+    created_at: datetime
+    onboarding_status: str

@@ -6,7 +6,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.routers.chat import router as chat_router
+from app.api.routers.feed import router as feed_router
 from app.api.routers.health import router as health_router
+from app.api.routers.roadmap import router as roadmap_router
+from app.api.routers.subjects import router as subjects_router
 from app.core.config import settings
 from app.db.redis import close_redis
 
@@ -40,6 +44,10 @@ app.add_middleware(
 
 # Routers
 app.include_router(health_router)
+app.include_router(subjects_router)
+app.include_router(roadmap_router)
+app.include_router(feed_router)
+app.include_router(chat_router)
 
 
 @app.get("/", tags=["root"], summary="Root")
