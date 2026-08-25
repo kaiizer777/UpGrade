@@ -7,6 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.analytics import record_event
 from app.db.database import get_session
 from app.models.feed_post import FeedPost
 from app.models.subject import Subject
@@ -196,6 +197,15 @@ async def get_feed(
     posts = list(posts_res.all())
 
     if not posts:
+        # JIT gap: cache miss - log loading state before fallback generation
+        record_event(
+            "jit_gap_miss", subject_id=str(subject_id), topic_id=target_topic.id
+        )
+        logger.info(
+            "JIT gap miss: no cached posts for subject %s topic %s - triggering synchronous generation (loading before fallback)",
+            subject_id,
+            target_topic.id,
+        )
         # Trigger generation synchronously
         # Try arq enqueue with wait? For simplicity, attempt enqueue then direct fallback if redis not available or wait.
         # We will attempt direct generation to ensure result available for response (works without redis).

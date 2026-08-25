@@ -10,6 +10,7 @@ from openai import AsyncOpenAI
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.analytics import record_event, record_latency
 from app.core.config import settings
 from app.models.feed_post import FeedPost
 from app.models.subject import Subject
@@ -214,6 +215,9 @@ async def generate_feed_batch(
     Raises:
         SubjectNotFoundError, TopicNotFoundError, FeedNotReadyError, AiGenerationError
     """
+    import time
+
+    _gen_start = time.perf_counter()
     subject = await session.get(Subject, subject_id)
     if not subject:
         raise SubjectNotFoundError(f"Subject '{subject_id}' not found.")
@@ -442,8 +446,19 @@ async def generate_feed_batch(
                 data = result.data or {}
                 # Return persisted posts shape
                 posts = data.get("posts", [])
+                elapsed_ms = int((time.perf_counter() - _gen_start) * 1000)
+                record_latency("feed_generation", elapsed_ms)
+                record_event(
+                    "feed_generated",
+                    topic_id=topic_id,
+                    post_count=len(posts),
+                    generation_ms=elapsed_ms,
+                )
                 logger.info(
-                    "Feed generated for topic %s: %s posts", topic_id, len(posts)
+                    "Feed generated for topic %s: %s posts in %sms",
+                    topic_id,
+                    len(posts),
+                    elapsed_ms,
                 )
                 return {
                     "topic_id": data.get("topic_id", topic_id),
@@ -464,6 +479,19 @@ async def generate_feed_batch(
     detail = (
         last_validation_error
         or "Model did not call generate_feed_batch with valid posts"
+    )
+    elapsed_ms = int((time.perf_counter() - _gen_start) * 1000)
+    record_event(
+        "feed_generation_failed",
+        topic_id=topic_id,
+        latency_ms=elapsed_ms,
+        reason=detail,
+    )
+    logger.warning(
+        "Feed generation failed for topic %s after %sms: %s",
+        topic_id,
+        elapsed_ms,
+        detail,
     )
     raise AiGenerationError(
         f"Feed generation failed: {detail} after {MAX_TOOL_ROUNDS} tool rounds."

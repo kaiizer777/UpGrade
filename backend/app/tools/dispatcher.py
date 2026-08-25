@@ -7,6 +7,7 @@ from typing import Any
 from pydantic import BaseModel, ValidationError
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.analytics import record_tool_result
 from app.tools.exceptions import ToolError
 from app.tools.handlers import (
     execute_ask_question,
@@ -180,13 +181,15 @@ async def execute_tool(
     tool_def = TOOL_REGISTRY.get(name)
     if not tool_def:
         available_tools = list(TOOL_REGISTRY.keys())
-        return ToolResult(
+        result = ToolResult(
             success=False,
             tool_name=name,
             error=f"Tool '{name}' is not registered. Tools: {available_tools}",
             error_code="TOOL_NOT_FOUND",
             details={"available_tools": available_tools},
         )
+        record_tool_result(name, result.success)
+        return result
 
     # 1. Parse and validate arguments against tool's Pydantic input schema
     try:
@@ -201,7 +204,7 @@ async def execute_tool(
             validated_params = tool_def.input_schema.model_validate(arguments)
         else:
             got_type = type(arguments).__name__
-            return ToolResult(
+            result = ToolResult(
                 success=False,
                 tool_name=name,
                 error=(
@@ -210,6 +213,8 @@ async def execute_tool(
                 ),
                 error_code="INVALID_ARGUMENT_TYPE",
             )
+            record_tool_result(name, result.success)
+            return result
     except ValidationError as err:
         errors = [
             {
@@ -219,18 +224,20 @@ async def execute_tool(
             }
             for e in err.errors()
         ]
-        return ToolResult(
+        result = ToolResult(
             success=False,
             tool_name=name,
             error=f"Validation failed for tool '{name}': {err.error_count()} error(s).",
             error_code="VALIDATION_ERROR",
             details={"validation_errors": errors},
         )
+        record_tool_result(name, result.success)
+        return result
 
     # 2. Execute the handler function
     try:
         result_model = await tool_def.handler(session, validated_params)
-        return ToolResult(
+        result = ToolResult(
             success=True,
             tool_name=name,
             data=result_model.model_dump(),
@@ -238,21 +245,27 @@ async def execute_tool(
             error_code=None,
             details=None,
         )
+        record_tool_result(name, result.success)
+        return result
     except ToolError as err:
         await session.rollback()
-        return ToolResult(
+        result = ToolResult(
             success=False,
             tool_name=name,
             error=err.message,
             error_code=err.code,
             details=err.details,
         )
+        record_tool_result(name, result.success)
+        return result
     except Exception as err:  # Broad catch-all to guarantee structured result
         await session.rollback()
-        return ToolResult(
+        result = ToolResult(
             success=False,
             tool_name=name,
             error=f"Internal error executing tool '{name}': {str(err)}",
             error_code="INTERNAL_ERROR",
             details={"exception_type": type(err).__name__},
         )
+        record_tool_result(name, result.success)
+        return result

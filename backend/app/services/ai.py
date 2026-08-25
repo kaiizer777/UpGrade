@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.analytics import record_event, record_latency
 from app.core.config import settings
 from app.models.onboarding_answers import OnboardingAnswer
 from app.models.subject_profile import SubjectProfile
@@ -309,6 +310,9 @@ async def run_onboarding_turn(
       with the subject's tracked open question (server-side pending-question
       registry, not model memory).
     """
+    import time as _time_mod
+
+    _onboard_start = _time_mod.perf_counter()
     _, _, model = _resolve_provider()
 
     profile = await _load_profile(session, subject_id)
@@ -539,6 +543,21 @@ async def run_onboarding_turn(
         )
 
     questions_asked = await _count_answers(session, subject_id)
+    elapsed_ms = int((_time_mod.perf_counter() - _onboard_start) * 1000)
+    record_latency("onboarding_turn", elapsed_ms)
+    record_event(
+        "onboarding_turn",
+        subject_id=str(subject_id),
+        finalized=finalized,
+        latency_ms=elapsed_ms,
+        questions_asked=questions_asked,
+    )
+    logger.info(
+        "Onboarding turn for %s finalized=%s latency=%sms",
+        subject_id,
+        finalized,
+        elapsed_ms,
+    )
     return OnboardingTurnResult(
         reply=reply, finalized=finalized, questions_asked=questions_asked
     )

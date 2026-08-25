@@ -10,6 +10,7 @@ from openai import AsyncOpenAI
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.analytics import record_event, record_latency
 from app.core.config import settings
 from app.models.chat_message import ChatMessage
 from app.models.subject import Subject
@@ -182,6 +183,9 @@ async def chat_turn(
         SubjectNotFoundError, TopicNotFoundError, AiConfigError, AiGenerationError
         ValueError if message empty.
     """
+    import time
+
+    _chat_start = time.perf_counter()
     cleaned = message.strip() if isinstance(message, str) else ""
     if not cleaned:
         raise ValueError("message must be a non-empty string")
@@ -323,6 +327,9 @@ async def chat_turn(
     )
     if not ai_result.success:
         raise AiGenerationError(ai_result.error or "Failed to persist AI message")
+    elapsed_ms = int((time.perf_counter() - _chat_start) * 1000)
+    record_latency("chat_turn", elapsed_ms)
+    record_event("chat_turn_success", topic_id=topic_id, latency_ms=elapsed_ms)
 
     # Reload full history ordered
     full_history = await _load_history(session, topic_id)

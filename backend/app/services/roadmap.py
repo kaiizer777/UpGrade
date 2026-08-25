@@ -11,6 +11,7 @@ from openai import AsyncOpenAI
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.analytics import record_event, record_latency
 from app.core.config import settings
 from app.models.subject import Subject
 from app.models.subject_profile import SubjectProfile, SubjectProfileStatus
@@ -350,6 +351,9 @@ async def generate_roadmap(
         AiConfigError: if provider not configured.
         AiGenerationError: if LLM fails to produce a valid roadmap.
     """
+    import time
+
+    _gen_start = time.perf_counter()
     subject = await session.get(Subject, subject_id)
     if not subject:
         raise SubjectNotFoundError(f"Subject '{subject_id}' not found.")
@@ -581,12 +585,21 @@ async def generate_roadmap(
                 tracker.record_success(name)
                 data = result.data or {}
                 active_id = data.get("active_topic_id")
+                elapsed_ms = int((time.perf_counter() - _gen_start) * 1000)
+                record_latency("roadmap_generation", elapsed_ms)
+                record_event(
+                    "roadmap_generated",
+                    subject_id=str(subject_id),
+                    topic_count=len(data.get("topics", [])),
+                    latency_ms=elapsed_ms,
+                )
                 logger.info(
-                    "Roadmap generated for subject %s: %s topics, active_topic_id=%s. "
+                    "Roadmap generated for subject %s: %s topics, active_topic_id=%s in %sms. "
                     "Triggering first generate_feed_batch job.",
                     subject_id,
                     len(data.get("topics", [])),
                     active_id,
+                    elapsed_ms,
                 )
                 # Trigger first feed generation via BackgroundTasks or tracked asyncio task
                 # (durable via arq/Redis; fallback to direct generation if Redis down)
@@ -612,6 +625,19 @@ async def generate_roadmap(
     detail = (
         last_validation_error
         or "Model did not call create_roadmap with a valid roadmap"
+    )
+    elapsed_ms = int((time.perf_counter() - _gen_start) * 1000)
+    record_event(
+        "roadmap_generation_failed",
+        subject_id=str(subject_id),
+        latency_ms=elapsed_ms,
+        reason=detail,
+    )
+    logger.warning(
+        "Roadmap generation failed for subject %s after %sms: %s",
+        subject_id,
+        elapsed_ms,
+        detail,
     )
     raise AiGenerationError(
         f"Roadmap generation failed: {detail} after {MAX_TOOL_ROUNDS} tool rounds."
