@@ -12,16 +12,21 @@ import logging
 import uuid
 from typing import Any
 
-from openai import AsyncOpenAI
 from pydantic import BaseModel
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.analytics import record_event, record_latency
-from app.core.config import settings
 from app.models.onboarding_answers import OnboardingAnswer
 from app.models.subject_profile import SubjectProfile
 from app.services.completeness import compute_completeness
+from app.services.llm import (
+    AiConfigError,
+    AiGenerationError,
+    _resolve_provider,
+    chat_completions_create_with_opencode_fallback,
+    get_client,
+)
 from app.tools.dispatcher import ToolRetryTracker, execute_tool, get_tool_definitions
 from app.tools.handlers import MAX_ONBOARDING_QUESTIONS
 
@@ -122,14 +127,6 @@ _ASSUMPTION_VALUES: dict[str, str] = {
 }
 
 
-class AiConfigError(Exception):
-    """Raised when the configured AI provider lacks credentials/base URL."""
-
-
-class AiGenerationError(Exception):
-    """Raised when the provider call or tool loop fails irrecoverably."""
-
-
 class OnboardingTurnResult(BaseModel):
     """Outcome of a single onboarding conversational turn."""
 
@@ -139,51 +136,12 @@ class OnboardingTurnResult(BaseModel):
 
 
 # ============================================================================
-# Provider plumbing
+# Provider plumbing (delegated to app.services.llm)
 # ============================================================================
 
-_client_cache: dict[tuple[str, str], AsyncOpenAI] = {}
-
-
-def _resolve_provider() -> tuple[str, str, str]:
-    """Resolve (base_url, api_key, model) for the configured provider."""
-    provider = settings.ai_provider.strip().lower()
-    if provider == "groq":
-        return (
-            settings.ai_base_url_groq,
-            settings.groq_api_key,
-            settings.ai_model_groq,
-        )
-    if provider == "opencode":
-        return (
-            settings.ai_base_url_opencode,
-            settings.opencode_api_key,
-            settings.ai_model_opencode,
-        )
-    raise AiConfigError(
-        f"Unknown ai_provider '{settings.ai_provider}' (expected 'groq' or 'opencode')."
-    )
-
-
-def get_client() -> AsyncOpenAI:
-    """Build (or reuse) the AsyncOpenAI client for the configured provider."""
-    base_url, api_key, _model = _resolve_provider()
-    if not api_key:
-        raise AiConfigError(
-            f"AI provider '{settings.ai_provider}' has no API key configured."
-        )
-    cache_key = (base_url, api_key)
-    client = _client_cache.get(cache_key)
-    if client is None:
-        client = AsyncOpenAI(base_url=base_url, api_key=api_key)
-        _client_cache[cache_key] = client
-    return client
-
-
-async def _chat_completions_create(**kwargs: Any) -> Any:
-    """Seam around the SDK call - monkeypatch this in tests."""
-    client = get_client()
-    return await client.chat.completions.create(**kwargs)
+_chat_completions_create = chat_completions_create_with_opencode_fallback
+_resolve_provider = _resolve_provider
+get_client = get_client
 
 
 # ============================================================================
@@ -313,7 +271,6 @@ async def run_onboarding_turn(
     import time as _time_mod
 
     _onboard_start = _time_mod.perf_counter()
-    _, _, model = _resolve_provider()
 
     profile = await _load_profile(session, subject_id)
     answers_count = await _count_answers(session, subject_id)
@@ -342,60 +299,18 @@ async def run_onboarding_turn(
     finalized = False
 
     for _round in range(MAX_TOOL_ROUNDS):
-        # Retry provider calls on rate limits (429) with exponential backoff
-        response = None
-        last_err: Exception | None = None
-        for _attempt in range(4):  # 1 initial + 3 retries
-            try:
-                response = await _chat_completions_create(
-                    model=model,
-                    messages=conversation,
-                    tools=get_tool_definitions(),
-                    tool_choice="auto",
-                )
-                last_err = None
-                break
-            except AiConfigError:
-                raise
-            except Exception as err:
-                last_err = err
-                err_name = type(err).__name__
-                err_str = str(err)
-                is_rate_limit = (
-                    "RateLimitError" in err_name
-                    or "rate_limit" in err_str.lower()
-                    or "429" in err_str
-                )
-                # Log provider error for live debugging (no secrets)
-                logger.warning(
-                    "AI provider error (attempt %s/4) %s: %s",
-                    _attempt + 1,
-                    err_name,
-                    err,
-                )
-                if is_rate_limit and _attempt < 3:
-                    backoff = (2**_attempt) * 1.5  # 1.5, 3, 6 seconds
-                    # respect Retry-After if present
-                    try:
-                        retry_after = getattr(err, "response", None)  # type: ignore[attr-defined]
-                        if retry_after is not None and hasattr(retry_after, "headers"):
-                            hdr = retry_after.headers.get(
-                                "retry-after"
-                            ) or retry_after.headers.get("Retry-After")  # type: ignore[attr-defined]
-                            if hdr:
-                                backoff = max(backoff, float(hdr))
-                    except Exception:
-                        pass
-                    await asyncio.sleep(backoff)
-                    continue
-                raise AiGenerationError(
-                    f"AI provider call failed: {err_name}: {err}"
-                ) from err
-        if last_err is not None:
-            # Should have raised already, but ensure we surface it
+        try:
+            response = await _chat_completions_create(
+                messages=conversation,
+                tools=get_tool_definitions(),
+                tool_choice="auto",
+            )
+        except (AiConfigError, AiGenerationError):
+            raise
+        except Exception as err:
             raise AiGenerationError(
-                f"AI provider call failed: {type(last_err).__name__}: {last_err}"
-            ) from last_err
+                f"AI provider call failed: {type(err).__name__}: {err}"
+            ) from err
         assert response is not None
 
         choice_message = response.choices[0].message

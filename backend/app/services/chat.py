@@ -1,27 +1,30 @@
 """Open Chat service: topic-scoped chat with profile+prereq context + persistence."""
 
-import asyncio
+import asyncio  # noqa: F401
 import json
 import logging
 import uuid
 from typing import Any
 
-from openai import AsyncOpenAI
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.analytics import record_event, record_latency
-from app.core.config import settings
+from app.core.config import settings  # noqa: F401
 from app.models.chat_message import ChatMessage
 from app.models.subject import Subject
 from app.models.subject_profile import SubjectProfile
 from app.models.topic import Topic
-from app.services.ai import AiConfigError, AiGenerationError
+from app.services.llm import (
+    AiConfigError,
+    AiGenerationError,
+    _resolve_provider,
+    chat_completions_create_with_opencode_fallback,
+    get_client,
+)
 from app.tools.dispatcher import TOOL_REGISTRY, execute_tool
 
 logger = logging.getLogger(__name__)
-
-_client_cache: dict[tuple[str, str], AsyncOpenAI] = {}
 
 
 class SubjectNotFoundError(Exception):
@@ -32,43 +35,13 @@ class TopicNotFoundError(Exception):
     """Raised when referenced topic does not exist or mismatched subject."""
 
 
-def _resolve_provider() -> tuple[str, str, str]:
-    provider = settings.ai_provider.strip().lower()
-    if provider == "groq":
-        return (
-            settings.ai_base_url_groq,
-            settings.groq_api_key,
-            settings.ai_model_groq,
-        )
-    if provider == "opencode":
-        return (
-            settings.ai_base_url_opencode,
-            settings.opencode_api_key,
-            settings.ai_model_opencode,
-        )
-    raise AiConfigError(
-        f"Unknown ai_provider '{settings.ai_provider}' (expected 'groq' or 'opencode')."
-    )
+# ============================================================================
+# Provider plumbing (delegated to app.services.llm)
+# ============================================================================
 
-
-def get_client() -> AsyncOpenAI:
-    base_url, api_key, _model = _resolve_provider()
-    if not api_key:
-        raise AiConfigError(
-            f"AI provider '{settings.ai_provider}' has no API key configured."
-        )
-    cache_key = (base_url, api_key)
-    client = _client_cache.get(cache_key)
-    if client is None:
-        client = AsyncOpenAI(base_url=base_url, api_key=api_key)
-        _client_cache[cache_key] = client
-    return client
-
-
-async def _chat_completions_create(**kwargs: Any) -> Any:
-    """Seam around SDK call - monkeypatch this in tests."""
-    client = get_client()
-    return await client.chat.completions.create(**kwargs)
+_chat_completions_create = chat_completions_create_with_opencode_fallback
+_resolve_provider = _resolve_provider
+get_client = get_client
 
 
 def _build_chat_system_prompt(
@@ -217,7 +190,6 @@ async def chat_turn(
 
     # Reload history for LLM context (including just-saved user message could be appended separately)
     # Build conversation: system + prior history + new user message
-    _, _, model = _resolve_provider()
     system_prompt = _build_chat_system_prompt(profile, subject, topic, prereq_topics)
 
     conversation: list[dict[str, Any]] = [
@@ -239,56 +211,18 @@ async def chat_turn(
         }
     ]
 
-    response = None
-    last_err: Exception | None = None
-    for _attempt in range(4):
-        try:
-            response = await _chat_completions_create(
-                model=model,
-                messages=conversation,
-                tools=tool_definitions,
-                tool_choice="auto",
-            )
-            last_err = None
-            break
-        except AiConfigError:
-            raise
-        except Exception as err:
-            last_err = err
-            err_name = type(err).__name__
-            err_str = str(err)
-            is_rate_limit = (
-                "RateLimitError" in err_name
-                or "rate_limit" in err_str.lower()
-                or "429" in err_str
-            )
-            logger.warning(
-                "Chat AI provider error (attempt %s/4) %s: %s",
-                _attempt + 1,
-                err_name,
-                err,
-            )
-            if is_rate_limit and _attempt < 3:
-                backoff = (2**_attempt) * 1.5
-                try:
-                    retry_after = getattr(err, "response", None)
-                    if retry_after is not None and hasattr(retry_after, "headers"):
-                        hdr = retry_after.headers.get(
-                            "retry-after"
-                        ) or retry_after.headers.get("Retry-After")
-                        if hdr:
-                            backoff = max(backoff, float(hdr))
-                except Exception:
-                    pass
-                await asyncio.sleep(backoff)
-                continue
-            raise AiGenerationError(
-                f"AI provider call failed: {err_name}: {err}"
-            ) from err
-    if last_err is not None:
+    try:
+        response = await _chat_completions_create(
+            messages=conversation,
+            tools=tool_definitions,
+            tool_choice="auto",
+        )
+    except (AiConfigError, AiGenerationError):
+        raise
+    except Exception as err:
         raise AiGenerationError(
-            f"AI provider call failed: {type(last_err).__name__}: {last_err}"
-        ) from last_err
+            f"AI provider call failed: {type(err).__name__}: {err}"
+        ) from err
     assert response is not None
 
     choice_message = response.choices[0].message

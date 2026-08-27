@@ -38,6 +38,7 @@ backend/.env
 backend/*.db
 backend/*.sqlite
 backend/check_*.py
+backend/scripts/clean_subjects.py
 backend/test_*.db
 backend/alembic/__pycache__/
 *.db
@@ -49,8 +50,15 @@ check_*.py
 venv/
 *.pyc
 
+# Web / Next.js — web/
+web/.next/
+web/node_modules/
+web/.env.local
+web/.env*.local
+
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+

@@ -134,26 +134,38 @@ class _ChatSheetState extends ConsumerState<ChatSheet> {
               Expanded(
                 child: historyAsync.when(
                   loading: () => const Center(child: CircularProgressIndicator(key: Key('chat-loading'))),
-                  error: (error, _) => Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.error_outline, size: 48, color: colorScheme.error),
-                          const SizedBox(height: 12),
-                          Text(error.toString(), textAlign: TextAlign.center, key: const Key('chat-error-text')),
-                          const SizedBox(height: 16),
-                          FilledButton.icon(
-                            key: const Key('chat-retry'),
-                            onPressed: () => ref.invalidate(chatHistoryProvider((subjectId: widget.subjectId, topicId: widget.topicId))),
-                            icon: const Icon(Icons.refresh),
-                            label: const Text('Retry'),
-                          ),
-                        ],
+                  error: (error, _) {
+                    String message = error.toString();
+                    if (error is ChatApiException) {
+                      if (error.statusCode == 502 || (error.statusCode != null && error.statusCode! >= 500 && error.statusCode! <= 504)) {
+                        message = 'AI assistant is temporarily unavailable. Please retry.';
+                      } else if (error.statusCode == 503) {
+                        message = 'Service temporarily unavailable. Please check your connection and retry.';
+                      } else {
+                        message = error.message;
+                      }
+                    }
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.error_outline, size: 48, color: colorScheme.error),
+                            const SizedBox(height: 12),
+                            Text(message, textAlign: TextAlign.center, key: const Key('chat-error-text')),
+                            const SizedBox(height: 16),
+                            FilledButton.icon(
+                              key: const Key('chat-retry'),
+                              onPressed: () => ref.invalidate(chatHistoryProvider((subjectId: widget.subjectId, topicId: widget.topicId))),
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Retry'),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ),
+                    );
+                  },
                   data: (messages) {
                     if (messages.isEmpty) {
                       return Center(
@@ -338,26 +350,38 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           Expanded(
             child: historyAsync.when(
               loading: () => const Center(child: CircularProgressIndicator(key: Key('chat-screen-loading'))),
-              error: (error, _) => Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.error_outline, size: 48, color: colorScheme.error),
-                      const SizedBox(height: 12),
-                      Text(error.toString(), textAlign: TextAlign.center, key: const Key('chat-screen-error')),
-                      const SizedBox(height: 16),
-                      FilledButton.icon(
-                        key: const Key('chat-screen-retry'),
-                        onPressed: () => ref.invalidate(chatHistoryProvider((subjectId: widget.subjectId, topicId: widget.topicId))),
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('Retry'),
-                      ),
-                    ],
+              error: (error, _) {
+                String message = error.toString();
+                if (error is ChatApiException) {
+                  if (error.statusCode == 502 || (error.statusCode != null && error.statusCode! >= 500 && error.statusCode! <= 504)) {
+                    message = 'AI assistant is temporarily unavailable. Please retry.';
+                  } else if (error.statusCode == 503) {
+                    message = 'Service temporarily unavailable. Please check your connection and retry.';
+                  } else {
+                    message = error.message;
+                  }
+                }
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.error_outline, size: 48, color: colorScheme.error),
+                        const SizedBox(height: 12),
+                        Text(message, textAlign: TextAlign.center, key: const Key('chat-screen-error')),
+                        const SizedBox(height: 16),
+                        FilledButton.icon(
+                          key: const Key('chat-screen-retry'),
+                          onPressed: () => ref.invalidate(chatHistoryProvider((subjectId: widget.subjectId, topicId: widget.topicId))),
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Retry'),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ),
+                );
+              },
               data: (messages) {
                 if (messages.isEmpty) {
                   return Center(

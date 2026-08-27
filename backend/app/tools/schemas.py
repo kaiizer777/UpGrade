@@ -379,8 +379,9 @@ class GenerateFeedBatchInput(BaseModel):
     )
     posts: list[FeedPostItem] = Field(
         ...,
-        min_length=1,
-        description="List of feed posts to persist.",
+        min_length=5,
+        max_length=10,
+        description="List of feed posts to persist (5-10 items, defense in depth with service-layer check).",
     )
 
     @field_validator("posts")

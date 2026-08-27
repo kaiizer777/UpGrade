@@ -1,0 +1,22 @@
+"use client";
+
+import { useSyncExternalStore } from "react";
+
+/**
+ * Custom hook to track whether a CSS media query matches.
+ * Uses `useSyncExternalStore` for idiomatic React 19 subscription and SSR safety.
+ */
+export function useMediaQuery(query: string): boolean {
+  return useSyncExternalStore(
+    (callback) => {
+      if (typeof window === "undefined") return () => {};
+      const media = window.matchMedia(query);
+      media.addEventListener("change", callback);
+      return () => {
+        media.removeEventListener("change", callback);
+      };
+    },
+    () => (typeof window !== "undefined" ? window.matchMedia(query).matches : false),
+    () => false
+  );
+}

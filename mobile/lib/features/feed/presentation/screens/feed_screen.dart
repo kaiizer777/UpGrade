@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import '../../../../core/config/app_config.dart';
 import '../../../chat/presentation/widgets/chat_sheet.dart';
 import '../../../subjects/presentation/widgets/subject_switcher.dart';
+import '../../data/api_client.dart';
 import '../providers.dart';
 
 class FeedScreen extends ConsumerStatefulWidget {
@@ -94,6 +95,25 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
     }
   }
 
+  String _formatFeedError(Object error) {
+    if (error is FeedApiException) {
+      final code = error.statusCode;
+      if (code == 502 || (code != null && code >= 500 && error.message.toLowerCase().contains('generation'))) {
+        return 'Feed generation failed. The AI tutor encountered an issue. Please retry.';
+      }
+      if (code == 503 || error.isNetwork) {
+        return 'Service temporarily unavailable. Background worker or network connection issue.';
+      }
+      if (code == 409 || code == 404) {
+        return error.message.isNotEmpty
+            ? error.message
+            : 'No active topic found. Please check your subject roadmap.';
+      }
+      return error.message;
+    }
+    return error.toString();
+  }
+
   @override
   Widget build(BuildContext context) {
     final feedAsync = ref.watch(feedProvider(widget.subjectId));
@@ -113,27 +133,57 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
         ],
       ),
       body: feedAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(
+        loading: () => Center(
           child: Padding(
             padding: const EdgeInsets.all(32),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.cloud_off_outlined, size: 56, color: colorScheme.error),
-                const SizedBox(height: 12),
-                Text(error.toString(), textAlign: TextAlign.center, key: const Key('feed-error-text')),
+                const CircularProgressIndicator(key: Key('feed-loading-indicator')),
                 const SizedBox(height: 16),
-                FilledButton.icon(
-                  key: const Key('feed-retry'),
-                  onPressed: () => ref.invalidate(feedProvider(widget.subjectId)),
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Retry'),
+                Text(
+                  'Generating your next feed...',
+                  style: theme.textTheme.titleMedium,
+                  textAlign: TextAlign.center,
+                  key: const Key('feed-loading-text'),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Personalizing lessons for this topic',
+                  style: theme.textTheme.bodyMedium?.copyWith(color: colorScheme.outline),
+                  textAlign: TextAlign.center,
                 ),
               ],
             ),
           ),
         ),
+        error: (error, _) {
+          final errorText = _formatFeedError(error);
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.cloud_off_outlined, size: 56, color: colorScheme.error),
+                  const SizedBox(height: 12),
+                  Text(
+                    errorText,
+                    textAlign: TextAlign.center,
+                    key: const Key('feed-error-text'),
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    key: const Key('feed-retry'),
+                    onPressed: () => ref.invalidate(feedProvider(widget.subjectId)),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Retry'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
         data: (feed) {
           if (feed.allTopicsCompleted) {
             return Center(
@@ -153,6 +203,47 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
               ),
             );
           }
+          if (feed.topic == null) {
+            return Center(
+              key: const Key('feed-no-topic'),
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.map_outlined, size: 56, color: colorScheme.outline),
+                    const SizedBox(height: 12),
+                    Text('No active topic yet', style: theme.textTheme.titleLarge),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Initialize your roadmap or select an active topic to start.',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyMedium?.copyWith(color: colorScheme.outline),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        FilledButton.icon(
+                          key: const Key('feed-no-topic-retry'),
+                          onPressed: () => ref.invalidate(feedProvider(widget.subjectId)),
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Retry'),
+                        ),
+                        const SizedBox(width: 12),
+                        OutlinedButton.icon(
+                          key: const Key('feed-no-topic-roadmap'),
+                          onPressed: () => context.go('/subjects/${widget.subjectId}/roadmap'),
+                          icon: const Icon(Icons.map_outlined),
+                          label: const Text('Roadmap'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
           if (feed.posts.isEmpty) {
             return Center(
               key: const Key('feed-empty'),
@@ -165,7 +256,14 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                     const SizedBox(height: 12),
                     Text('Generating your personalized feed...', style: theme.textTheme.titleMedium),
                     const SizedBox(height: 8),
-                    Text('This may take a few seconds. Pull to refresh.', style: theme.textTheme.bodyMedium?.copyWith(color: colorScheme.outline)),
+                    Text('This may take a few seconds. Pull to refresh or tap Retry.', textAlign: TextAlign.center, style: theme.textTheme.bodyMedium?.copyWith(color: colorScheme.outline)),
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                      key: const Key('feed-empty-retry'),
+                      onPressed: () => ref.invalidate(feedProvider(widget.subjectId)),
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Retry'),
+                    ),
                   ],
                 ),
               ),

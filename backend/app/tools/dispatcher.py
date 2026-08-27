@@ -1,5 +1,6 @@
 """Tool execution dispatcher, schema registry, and structured error handling."""
 
+import time
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from typing import Any
@@ -178,6 +179,7 @@ async def execute_tool(
     - Validation errors return structured field breakdowns for the LLM to self-correct.
     - Automatic rollback on unexpected execution failures.
     """
+    start_time = time.perf_counter()
     tool_def = TOOL_REGISTRY.get(name)
     if not tool_def:
         available_tools = list(TOOL_REGISTRY.keys())
@@ -188,7 +190,13 @@ async def execute_tool(
             error_code="TOOL_NOT_FOUND",
             details={"available_tools": available_tools},
         )
-        record_tool_result(name, result.success)
+        elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+        record_tool_result(
+            name,
+            result.success,
+            error_code=result.error_code,
+            latency_ms=elapsed_ms,
+        )
         return result
 
     # 1. Parse and validate arguments against tool's Pydantic input schema
@@ -213,7 +221,13 @@ async def execute_tool(
                 ),
                 error_code="INVALID_ARGUMENT_TYPE",
             )
-            record_tool_result(name, result.success)
+            elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+            record_tool_result(
+                name,
+                result.success,
+                error_code=result.error_code,
+                latency_ms=elapsed_ms,
+            )
             return result
     except ValidationError as err:
         errors = [
@@ -231,7 +245,13 @@ async def execute_tool(
             error_code="VALIDATION_ERROR",
             details={"validation_errors": errors},
         )
-        record_tool_result(name, result.success)
+        elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+        record_tool_result(
+            name,
+            result.success,
+            error_code=result.error_code,
+            latency_ms=elapsed_ms,
+        )
         return result
 
     # 2. Execute the handler function
@@ -245,7 +265,13 @@ async def execute_tool(
             error_code=None,
             details=None,
         )
-        record_tool_result(name, result.success)
+        elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+        record_tool_result(
+            name,
+            result.success,
+            error_code=result.error_code,
+            latency_ms=elapsed_ms,
+        )
         return result
     except ToolError as err:
         await session.rollback()
@@ -256,7 +282,13 @@ async def execute_tool(
             error_code=err.code,
             details=err.details,
         )
-        record_tool_result(name, result.success)
+        elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+        record_tool_result(
+            name,
+            result.success,
+            error_code=result.error_code,
+            latency_ms=elapsed_ms,
+        )
         return result
     except Exception as err:  # Broad catch-all to guarantee structured result
         await session.rollback()
@@ -267,5 +299,11 @@ async def execute_tool(
             error_code="INTERNAL_ERROR",
             details={"exception_type": type(err).__name__},
         )
-        record_tool_result(name, result.success)
+        elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+        record_tool_result(
+            name,
+            result.success,
+            error_code=result.error_code,
+            latency_ms=elapsed_ms,
+        )
         return result

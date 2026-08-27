@@ -1,4 +1,12 @@
-"""Roadmap generation service: subject_profile → ordered topic DAG."""
+"""Roadmap generation service: subject_profile → ordered topic DAG.
+
+Wiring note (audit gap): roadmap generation is CLIENT-DRIVEN, not auto-triggered
+by finalize_profile. After `execute_finalize_profile` sets status=ready
+(`app/tools/handlers.py:finalize_profile`), the client must call
+`POST /subjects/{id}/roadmap` (`app/api/routers/roadmap.py:post_roadmap`) which
+invokes `generate_roadmap` here. This separation keeps onboarding and curriculum
+generation idempotent and testable; no behavior change needed.
+"""
 
 import asyncio
 import json
@@ -7,16 +15,20 @@ import uuid
 from typing import Any
 
 from fastapi import BackgroundTasks
-from openai import AsyncOpenAI
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.analytics import record_event, record_latency
-from app.core.config import settings
 from app.models.subject import Subject
 from app.models.subject_profile import SubjectProfile, SubjectProfileStatus
 from app.models.topic import Topic, TopicStatus
-from app.services.ai import AiConfigError, AiGenerationError
+from app.services.llm import (
+    AiConfigError,
+    AiGenerationError,
+    _resolve_provider,
+    chat_completions_create_with_opencode_fallback,
+    get_client,
+)
 from app.tools.dispatcher import TOOL_REGISTRY, ToolRetryTracker, execute_tool
 
 logger = logging.getLogger(__name__)
@@ -126,8 +138,6 @@ MAX_TOOL_RETRIES = 3
 
 _SUBJECT_SCOPED_TOOLS = frozenset({"create_roadmap"})
 
-_client_cache: dict[tuple[str, str], AsyncOpenAI] = {}
-
 
 class SubjectNotFoundError(Exception):
     """Raised when the referenced subject does not exist."""
@@ -137,45 +147,13 @@ class RoadmapNotReadyError(Exception):
     """Raised when onboarding is not finalized (profile missing or not ready)."""
 
 
-def _resolve_provider() -> tuple[str, str, str]:
-    """Resolve (base_url, api_key, model) for the configured provider."""
-    provider = settings.ai_provider.strip().lower()
-    if provider == "groq":
-        return (
-            settings.ai_base_url_groq,
-            settings.groq_api_key,
-            settings.ai_model_groq,
-        )
-    if provider == "opencode":
-        return (
-            settings.ai_base_url_opencode,
-            settings.opencode_api_key,
-            settings.ai_model_opencode,
-        )
-    raise AiConfigError(
-        f"Unknown ai_provider '{settings.ai_provider}' (expected 'groq' or 'opencode')."
-    )
+# ============================================================================
+# Provider plumbing (delegated to app.services.llm)
+# ============================================================================
 
-
-def get_client() -> AsyncOpenAI:
-    """Build (or reuse) the AsyncOpenAI client for the configured provider."""
-    base_url, api_key, _model = _resolve_provider()
-    if not api_key:
-        raise AiConfigError(
-            f"AI provider '{settings.ai_provider}' has no API key configured."
-        )
-    cache_key = (base_url, api_key)
-    client = _client_cache.get(cache_key)
-    if client is None:
-        client = AsyncOpenAI(base_url=base_url, api_key=api_key)
-        _client_cache[cache_key] = client
-    return client
-
-
-async def _chat_completions_create(**kwargs: Any) -> Any:
-    """Seam around the SDK call - monkeypatch this in tests."""
-    client = get_client()
-    return await client.chat.completions.create(**kwargs)
+_chat_completions_create = chat_completions_create_with_opencode_fallback
+_resolve_provider = _resolve_provider
+get_client = get_client
 
 
 def _build_roadmap_system_prompt(profile: SubjectProfile, subject: Subject) -> str:
@@ -366,7 +344,6 @@ async def generate_roadmap(
     if existing:
         return _to_roadmap_output(subject_id, existing)
 
-    _, _, model = _resolve_provider()
     system_prompt = _build_roadmap_system_prompt(profile, subject)
 
     # Only expose create_roadmap to the model for this turn
@@ -394,57 +371,18 @@ async def generate_roadmap(
     last_validation_error: str | None = None
 
     for _round in range(MAX_TOOL_ROUNDS):
-        # Provider call with 429 retry
-        response = None
-        last_err: Exception | None = None
-        for _attempt in range(4):
-            try:
-                response = await _chat_completions_create(
-                    model=model,
-                    messages=conversation,
-                    tools=tool_definitions,
-                    tool_choice="auto",
-                )
-                last_err = None
-                break
-            except AiConfigError:
-                raise
-            except Exception as err:
-                last_err = err
-                err_name = type(err).__name__
-                err_str = str(err)
-                is_rate_limit = (
-                    "RateLimitError" in err_name
-                    or "rate_limit" in err_str.lower()
-                    or "429" in err_str
-                )
-                logger.warning(
-                    "Roadmap AI provider error (attempt %s/4) %s: %s",
-                    _attempt + 1,
-                    err_name,
-                    err,
-                )
-                if is_rate_limit and _attempt < 3:
-                    backoff = (2**_attempt) * 1.5
-                    try:
-                        retry_after = getattr(err, "response", None)  # type: ignore[attr-defined]
-                        if retry_after is not None and hasattr(retry_after, "headers"):
-                            hdr = retry_after.headers.get(
-                                "retry-after"
-                            ) or retry_after.headers.get("Retry-After")  # type: ignore[attr-defined]
-                            if hdr:
-                                backoff = max(backoff, float(hdr))
-                    except Exception:
-                        pass
-                    await asyncio.sleep(backoff)
-                    continue
-                raise AiGenerationError(
-                    f"AI provider call failed: {err_name}: {err}"
-                ) from err
-        if last_err is not None:
+        try:
+            response = await _chat_completions_create(
+                messages=conversation,
+                tools=tool_definitions,
+                tool_choice="auto",
+            )
+        except (AiConfigError, AiGenerationError):
+            raise
+        except Exception as err:
             raise AiGenerationError(
-                f"AI provider call failed: {type(last_err).__name__}: {last_err}"
-            ) from last_err
+                f"AI provider call failed: {type(err).__name__}: {err}"
+            ) from err
         assert response is not None
 
         choice_message = response.choices[0].message
@@ -627,6 +565,7 @@ async def generate_roadmap(
         or "Model did not call create_roadmap with a valid roadmap"
     )
     elapsed_ms = int((time.perf_counter() - _gen_start) * 1000)
+    record_latency("roadmap_generation", elapsed_ms)
     record_event(
         "roadmap_generation_failed",
         subject_id=str(subject_id),

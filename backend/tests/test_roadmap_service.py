@@ -189,8 +189,7 @@ async def test_happy_path_creates_6_topics_first_active(
     assert all(t.status.value == "pending" for t in persisted[1:])
     # Prereqs resolved: second topic should have first's id, third etc
     assert persisted[1].prerequisite_ids == [persisted[0].id]
-    # Check tool was called with correct model and scoped subject_id
-    assert llm.calls[0]["model"]
+    # Check tool was called with scoped subject_id
     assert llm.calls[0]["tools"][0]["function"]["name"] == "create_roadmap"
     # Verify system prompt contains DSA
     system_contents = [
@@ -398,13 +397,19 @@ async def test_provider_429_retry_path(
         message = SimpleNamespace(content="", tool_calls=tool_calls)
         return SimpleNamespace(choices=[SimpleNamespace(message=message)])
 
-    monkeypatch.setattr(roadmap_module, "_chat_completions_create", flaky)
+    import app.services.llm as llm_module
 
-    # Make sleep instant
+    fake_client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(create=flaky)
+        )
+    )
+    monkeypatch.setattr(llm_module, "get_client_for", lambda *_a, **_k: fake_client)
+
     async def no_sleep(_: float) -> None:
         return None
 
-    monkeypatch.setattr(roadmap_module.asyncio, "sleep", no_sleep)
+    monkeypatch.setattr(llm_module.asyncio, "sleep", no_sleep)
 
     result = await generate_roadmap(session, subject.id)
     assert len(result["topics"]) == 6

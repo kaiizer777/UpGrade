@@ -11,11 +11,20 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.models.chat_message import ChatMessage
 from app.models.subject import Subject
-from app.models.subject_profile import PacePreference, SubjectProfile, SubjectProfileStatus
+from app.models.subject_profile import (
+    PacePreference,
+    SubjectProfile,
+    SubjectProfileStatus,
+)
 from app.models.topic import Topic, TopicStatus
 from app.services import chat as chat_module
 from app.services.ai import AiConfigError, AiGenerationError
-from app.services.chat import SubjectNotFoundError, TopicNotFoundError, chat_turn, get_chat_history
+from app.services.chat import (
+    SubjectNotFoundError,
+    TopicNotFoundError,
+    chat_turn,
+    get_chat_history,
+)
 
 
 def _tool_call(call_id: str, name: str, args: dict[str, Any]) -> SimpleNamespace:

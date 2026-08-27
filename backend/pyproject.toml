@@ -56,5 +56,10 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = "-v"
 
+[project.scripts]
+# arq worker entry — canonical launch: uv run arq app.workers.feed.WorkerSettings
+# This script exposes `arq` CLI; `uv run worker` is equivalent to `uv run arq`.
+worker = "arq.cli:main"
+
 [tool.uv]
 managed = true

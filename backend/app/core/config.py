@@ -19,16 +19,48 @@ class Settings(BaseSettings):
     ai_provider: str = "groq"
     ai_model_groq: str = "openai/gpt-oss-120b"
     ai_model_opencode: str = "hy3-free"
+    ai_model_opencode_fallback: str = "nemotron-3-ultra-free"
     ai_base_url_groq: str = "https://api.groq.com/openai/v1"
     ai_base_url_opencode: str = "https://opencode.ai/zen/v1"
     google_client_id: str = ""
     google_client_secret: str = ""
+
+    # CORS — comma-separated origins or single frontend URL for prod.
+    # Example: CORS_ORIGINS=https://app.example.com,https://admin.example.com
+    # or FRONTEND_URL=https://app.example.com
+    cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173"
+    frontend_url: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @property
+    def cors_allow_origins(self) -> list[str]:
+        """Compute effective CORS allow_origins.
+
+        Resolution:
+          - If CORS_ORIGINS is set, splits comma-separated origins.
+          - If FRONTEND_URL is set, appends it to allowed origins.
+          - Fallback to localhost dev origins if empty.
+        """
+        origins: list[str] = []
+        if self.cors_origins.strip():
+            origins.extend(
+                [p.strip() for p in self.cors_origins.split(",") if p.strip()]
+            )
+        if self.frontend_url.strip():
+            f_url = self.frontend_url.strip()
+            if f_url not in origins:
+                origins.append(f_url)
+        return origins or [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+        ]
 
     @property
     def async_database_url(self) -> str:

@@ -236,11 +236,20 @@ async def execute_update_profile_slots(
     )
 
 
+# Sets status=ready + ready_for_roadmap=True. Roadmap generation is client-driven
+# via POST /subjects/{id}/roadmap (gated on READY) — see mobile/lib/features/roadmap/presentation/screens/roadmap_screen.dart:29
 async def execute_finalize_profile(
     session: AsyncSession,
     params: FinalizeProfileInput,
 ) -> FinalizeProfileOutput:
-    """Lock subject profile, persist personalization slots, and set status to READY."""
+    """Lock subject profile, persist personalization slots, and set status to READY.
+
+    Wiring note: this does NOT auto-generate the roadmap. After status becomes
+    READY, the client triggers `POST /subjects/{id}/roadmap`
+    (`app/api/routers/roadmap.py:post_roadmap` → `app/services/roadmap.py:generate_roadmap`).
+    Keeping finalize and roadmap generation decoupled avoids implicit side-effects
+    and makes the flow idempotent (see also `app/services/roadmap.py` header).
+    """
     parsed_sid = _require_subject_id(params.subject_id)
     subject = await session.get(Subject, parsed_sid)
     if not subject:

@@ -9,10 +9,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.db.database import get_session
 from app.main import app
 from app.models.chat_message import ChatMessage
-from app.models.subject import Subject
-from app.models.topic import Topic, TopicStatus
 from app.services.ai import AiConfigError, AiGenerationError
-
 from tests.test_chat_service import _create_subject, _create_topic, _make_ready_profile
 
 

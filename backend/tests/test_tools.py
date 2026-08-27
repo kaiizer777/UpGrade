@@ -495,15 +495,35 @@ async def test_create_roadmap_non_existent_subject(session: AsyncSession) -> Non
 
 
 def test_generate_feed_batch_schema_validation() -> None:
-    """Validate GenerateFeedBatchInput constraints."""
+    """Validate GenerateFeedBatchInput constraints (5-10 posts, defense in depth)."""
     valid = GenerateFeedBatchInput(
         topic_id=1,
         posts=[
             FeedPostItem(content="Post 1", order_index=0),
             FeedPostItem(content="Post 2", order_index=1),
+            FeedPostItem(content="Post 3", order_index=2),
+            FeedPostItem(content="Post 4", order_index=3),
+            FeedPostItem(content="Post 5", order_index=4),
         ],
     )
-    assert len(valid.posts) == 2
+    assert len(valid.posts) == 5
+
+    # Fewer than 5 posts should fail (schema enforces 5-10, service layer also checks)
+    with pytest.raises(ValidationError):
+        GenerateFeedBatchInput(
+            topic_id=1,
+            posts=[
+                FeedPostItem(content="Post 1", order_index=0),
+                FeedPostItem(content="Post 2", order_index=1),
+            ],
+        )
+
+    # More than 10 posts should fail
+    with pytest.raises(ValidationError):
+        GenerateFeedBatchInput(
+            topic_id=1,
+            posts=[FeedPostItem(content=f"Post {i}", order_index=i) for i in range(11)],
+        )
 
     # Duplicate order_index should fail
     with pytest.raises(ValidationError):
@@ -512,6 +532,9 @@ def test_generate_feed_batch_schema_validation() -> None:
             posts=[
                 FeedPostItem(content="Post 1", order_index=0),
                 FeedPostItem(content="Post 2", order_index=0),
+                FeedPostItem(content="Post 3", order_index=2),
+                FeedPostItem(content="Post 4", order_index=3),
+                FeedPostItem(content="Post 5", order_index=4),
             ],
         )
 
@@ -525,7 +548,7 @@ def test_generate_feed_batch_schema_validation() -> None:
 
 @pytest.mark.asyncio
 async def test_generate_feed_batch_execution(session: AsyncSession) -> None:
-    """generate_feed_batch bulk inserts posts attached to a topic."""
+    """generate_feed_batch bulk inserts posts attached to a topic (5-10 required)."""
     subject = await _create_test_subject(session, "Async Python")
     topic = await _create_test_topic(session, subject.id, "Event Loop")
 
@@ -544,13 +567,21 @@ async def test_generate_feed_batch_execution(session: AsyncSession) -> None:
                 content="Use asyncio.to_thread for blocking sync calls.",
                 order_index=2,
             ),
+            FeedPostItem(
+                content="Gather and create_task schedule coroutines concurrently.",
+                order_index=3,
+            ),
+            FeedPostItem(
+                content="Always handle cancellation and timeouts gracefully.",
+                order_index=4,
+            ),
         ],
     )
 
     res = await execute_generate_feed_batch(session, params)
     assert res.topic_id == topic.id
-    assert res.post_count == 3
-    assert len(res.posts) == 3
+    assert res.post_count == 5
+    assert len(res.posts) == 5
     assert res.posts[0].order_index == 0
     assert res.posts[1].order_index == 1
     assert res.posts[2].order_index == 2
@@ -562,7 +593,7 @@ async def test_generate_feed_batch_execution(session: AsyncSession) -> None:
         .order_by(FeedPost.order_index.asc())
     )
     db_posts = (await session.exec(stmt)).all()
-    assert len(db_posts) == 3
+    assert len(db_posts) == 5
     assert db_posts[0].content.startswith("The event loop")
 
 
@@ -573,7 +604,7 @@ async def test_generate_feed_batch_non_existent_topic(
     """generate_feed_batch for non-existent topic raises ToolNotFoundError."""
     params = GenerateFeedBatchInput(
         topic_id=99999,
-        posts=[FeedPostItem(content="Some post", order_index=0)],
+        posts=[FeedPostItem(content=f"Post {i}", order_index=i) for i in range(5)],
     )
     with pytest.raises(ToolNotFoundError):
         await execute_generate_feed_batch(session, params)

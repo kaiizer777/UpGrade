@@ -234,9 +234,10 @@ async def get_feed(
                 detail=f"Subject '{subject_id}' not found.",
             ) from None
         except FeedTopicNotFound:
+            tid = target_topic.id if target_topic else topic_id
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Topic '{topic_id}' not found.",
+                detail=f"Topic '{tid}' not found.",
             ) from None
         except FeedNotReadyError as exc:
             raise HTTPException(

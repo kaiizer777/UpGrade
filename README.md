@@ -74,6 +74,9 @@ uv run fastapi dev app/main.py
 # or
 uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
+# worker (arq background feed generator)
+Worker: uv run arq app.workers.feed.WorkerSettings
+
 # prod
 uv run fastapi run app/main.py
 uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
