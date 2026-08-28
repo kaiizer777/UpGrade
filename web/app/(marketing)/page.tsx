@@ -17,22 +17,24 @@ export default function MarketingPage() {
         }
       `}</style>
       {/* Header */}
-      <header className="sticky top-0 z-50 flex h-16 w-full items-center justify-between border-b border-border bg-background/80 px-4 backdrop-blur-md sm:px-8">
-        <div className="flex items-center gap-2">
-          <div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
-            <Zap className="size-5" />
+      <header className="sticky top-0 z-50 w-full border-b border-border bg-background/80 backdrop-blur-md">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-8">
+          <div className="flex items-center gap-2">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+              <Zap className="size-5" />
+            </div>
+            <span className="text-xl font-bold tracking-tight">UpGrade</span>
           </div>
-          <span className="text-xl font-bold tracking-tight">UpGrade</span>
-        </div>
 
-        <div className="flex items-center gap-3">
-          <Link
-            href="/subjects"
-            className={cn(buttonVariants({ size: "sm" }))}
-          >
-            Launch App
-            <ArrowRight className="size-4" />
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/subjects"
+              className={cn(buttonVariants({ size: "sm" }))}
+            >
+              Manage Subjects
+              <ArrowRight className="size-4" />
+            </Link>
+          </div>
         </div>
       </header>
 
