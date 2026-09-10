@@ -41,7 +41,7 @@ def record_tool_result(
     if latency_ms > 0:
         _tool_latencies[tool_name].append(latency_ms)
         if len(_tool_latencies[tool_name]) > 100:
-            _tool_latencies[tool_name].pop(0)
+            _tool_latencies[tool_name].pop()
 
     total = _tool_success[tool_name] + _tool_failure[tool_name]
     success_rate = (_tool_success[tool_name] / total * 100) if total else 0.0
@@ -124,9 +124,9 @@ def get_tool_stats() -> list[dict[str, object]]:
         succ = _tool_success[name]
         fail = _tool_failure[name]
         total = succ + fail
-        rate = (succ / total * 100) if total else 0.0
+        rate = (succ / total) if total else 0.0
         lats = _tool_latencies[name]
-        avg_lat = (sum(lats) / len(lats)) if lats else 0.0
+        avg_lat = (sum(lats) / total) if total else 0.0
         stats.append(
             {
                 "tool": name,
@@ -135,7 +135,7 @@ def get_tool_stats() -> list[dict[str, object]]:
                 "total": total,
                 "success_rate": round(rate, 2),
                 "avg_latency_ms": round(avg_lat, 2),
-                "error_codes": dict(_tool_errors[name]),
+                "error_codes": list(_tool_errors[name].keys()),
             }
         )
     return stats
