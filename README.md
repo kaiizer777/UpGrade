@@ -142,6 +142,10 @@ The app currently shows `Hello World!` (empty template). Clean-architecture fold
 3. **State:** `flutter pub add flutter_riverpod riverpod_annotation go_router dio json_serializable build_runner`
 4. **DB:** SQLModel 0.0.39 + asyncpg + alembic (`alembic` dir placeholder exists)
 
+### 4. Automated CI Self-Healing & AI Code Review
+- Monitored by **Haunter** autonomous CI failure diagnosis & code review agent.
+- Automatic PR triage, failure log ingestion, sandbox fix verification, and automated PR generation.
+
 ---
 
 ## License
