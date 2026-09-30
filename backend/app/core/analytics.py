@@ -124,7 +124,7 @@ def get_tool_stats() -> list[dict[str, object]]:
         succ = _tool_success[name]
         fail = _tool_failure[name]
         total = succ + fail
-        rate = (succ / total * 100) if total else 0.0
+        rate = (succ / total) if total else 0.0
         lats = _tool_latencies[name]
         avg_lat = (sum(lats) / len(lats)) if lats else 0.0
         stats.append(
