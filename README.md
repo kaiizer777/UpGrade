@@ -6,7 +6,7 @@ Monorepo for **UpGrade** — personal AI-powered learning platform for anyone wh
 > - **Frontend:** Flutter **3.47.1** • Dart **3.13.1** • Material 3 (empty template) — `mobile/`
 > - **Backend:** FastAPI **0.141.1** • Pydantic **2.13.4** • Python **3.13** via **uv 0.12.5** — `backend/`
 
-Initialized 2026-08-24 — no features yet, only project scaffolding.
+Initialized 2026-08-24 — no features yet, only project scaffolding..
 
 ---
 
