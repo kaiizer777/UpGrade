@@ -1,4 +1,4 @@
-# UpGrade — AI-Powered Learning App
+# UpGrade — AI-Powered Learning Appp
 
 Monorepo for **UpGrade** — personal AI-powered learning platform for anyone who is learning stuff.
 
