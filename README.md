@@ -1,6 +1,6 @@
 # UpGrade — AI-Powered Learning Appp
 
-Monorepo for **UpGrade** — personal AI-powered learning platform for anyone who is learning stuff.
+Monorepo for **UpGrade** — personal AI-powered learning platform for anyone who is learning concepts.
 
 > Stack (Aug 2026 — latest stable verified):
 > - **Frontend:** Flutter **3.47.1** • Dart **3.13.1** • Material 3 (empty template) — `mobile/`
