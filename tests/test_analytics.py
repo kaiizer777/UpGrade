@@ -1,3 +1,4 @@
+"""Unit tests for analytics module (Haunter CI healing trigger v2)."""
 from backend.app.core.analytics import (
     record_tool_call,
     record_tool_result,
